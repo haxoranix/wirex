@@ -3,220 +3,633 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wireframe Builder</title>
+  <title>Wireframe Builder Pro Max Ultra</title>
   
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Interact.js for Drag and Resize -->
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-  
-  <!-- html-to-image for PNG generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
 
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    
+    /* Grid Background */
     .canvas-bg {
       background-size: 20px 20px;
       background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+      position: relative;
     }
-    .draggable {
-      touch-action: none;
-      user-select: none;
-      position: absolute;
-    }
+    
+    .draggable { touch-action: none; user-select: none; position: absolute; box-sizing: border-box; }
+    .draggable [contenteditable="true"] { user-select: text; cursor: text; transition: all 0.2s; min-width: 10px; min-height: 20px; }
+    .draggable [contenteditable="true"]:focus { outline: 2px solid #3b82f6; background: rgba(255,255,255,0.9); border-radius: 4px; }
+    
+    /* Custom Exact Text Sizes */
+    .ts-14 { font-size: 14px !important; line-height: 1.4 !important; }
+    .ts-16 { font-size: 16px !important; line-height: 1.4 !important; }
+    .ts-20 { font-size: 20px !important; line-height: 1.3 !important; }
+    .ts-24 { font-size: 24px !important; line-height: 1.2 !important; }
+    .ts-28 { font-size: 28px !important; line-height: 1.2 !important; }
+    .ts-34 { font-size: 34px !important; line-height: 1.1 !important; }
+    .ts-42 { font-size: 42px !important; line-height: 1.1 !important; }
+    .ts-48 { font-size: 48px !important; line-height: 1.1 !important; }
+
+    /* Drag & Resize Handles */
     .resize-handle {
-      position: absolute;
-      right: -5px;
-      bottom: -5px;
-      width: 15px;
-      height: 15px;
-      background: #3b82f6;
-      border-radius: 50%;
-      cursor: se-resize;
-      display: none;
+      position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px;
+      background: #2563eb; border: 2px solid white; border-radius: 50%;
+      cursor: se-resize; display: none; z-index: 10;
     }
-    .draggable:hover .resize-handle {
-      display: block;
+    .drag-handle {
+      position: absolute; top: -12px; left: -12px; width: 24px; height: 24px;
+      background: #1f2937; color: white; border-radius: 4px; display: none;
+      align-items: center; justify-content: center; cursor: move; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    .active-element {
-      outline: 2px dashed #3b82f6;
+    
+    .draggable:hover .resize-handle, .active-element .resize-handle { display: block; }
+    .draggable:hover .drag-handle, .active-element .drag-handle { display: flex; }
+    .active-element { outline: 2px solid #2563eb; outline-offset: 2px; }
+    
+    /* Lock State */
+    .locked.active-element { outline: 2px solid #ef4444; }
+    .locked .resize-handle, .locked .drag-handle { display: none !important; }
+    .section-block { z-index: 1 !important; }
+
+    /* Lasso Selection Box */
+    #lasso-box {
+      border: 1px solid rgba(59, 130, 246, 0.8); background: rgba(59, 130, 246, 0.1);
+      position: absolute; display: none; z-index: 9999; pointer-events: none;
     }
+
+    /* Smart Guides */
+    .guide-line { position: absolute; background-color: #ef4444; z-index: 9998; display: none; pointer-events: none; }
+    #guide-v { width: 1px; top: 0; bottom: 0; }
+    #guide-h { height: 1px; left: 0; right: 0; }
+
+    #context-menu { display: none; position: absolute; z-index: 10000; }
+    #help-modal { display: none; z-index: 20000; }
   </style>
 </head>
-<body class="bg-gray-50 h-screen flex overflow-hidden">
+<body class="bg-gray-100 h-screen flex overflow-hidden">
 
-  <!-- Sidebar -->
-  <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
-    <div class="p-6 border-b border-gray-100">
-      <h1 class="text-xl font-bold text-gray-800 tracking-tight">Wireframe UI</h1>
-      <p class="text-xs text-gray-500 mt-1">Click to add to canvas</p>
+  <!-- Help Modal -->
+  <div id="help-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-lg shadow-xl p-8 max-w-md w-full relative">
+      <button onclick="document.getElementById('help-modal').style.display='none'" class="absolute top-4 right-4 text-gray-400 hover:text-black">✖</button>
+      <h2 class="text-2xl font-bold mb-4">Shortcuts & Tools</h2>
+      <ul class="space-y-3 text-sm text-gray-600">
+        <li><kbd class="bg-gray-100 border p-1 rounded font-mono">H</kbd> - Toggle Help Menu</li>
+        <li><kbd class="bg-gray-100 border p-1 rounded font-mono">Left Click + Drag</kbd> - Lasso Select multiple elements</li>
+        <li><kbd class="bg-gray-100 border p-1 rounded font-mono">Right Click</kbd> - Layer options & Locking</li>
+        <li><kbd class="bg-gray-100 border p-1 rounded font-mono">Cmd/Ctrl + C/V</kbd> - Copy and Paste</li>
+        <li><kbd class="bg-gray-100 border p-1 rounded font-mono">Cmd/Ctrl + Z/Y</kbd> - Undo / Redo</li>
+        <li><kbd class="bg-gray-100 border p-1 rounded font-mono">Del / Backspace</kbd> - Delete selected</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div id="context-menu" class="bg-white border border-gray-200 shadow-lg rounded-md py-1 w-48 text-sm">
+    <button onclick="layerAction('front')" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700">Bring to Front</button>
+    <button onclick="layerAction('back')" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700">Send to Back</button>
+    <div class="border-t border-gray-100 my-1"></div>
+    <button onclick="layerAction('toggle-lock')" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 font-medium">🔒 Lock / Unlock</button>
+    <div class="border-t border-gray-100 my-1"></div>
+    <button onclick="layerAction('delete')" class="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600">Delete</button>
+  </div>
+
+  <!-- Sidebar (Fully Flex-Based Layout) -->
+  <aside class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-50 shrink-0 h-full">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 shrink-0">
+      <h1 class="text-xl font-bold text-gray-800">Wireframe Pro</h1>
+      <p class="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">With Smart Guides & Lasso</p>
     </div>
     
-    <div class="p-4 flex flex-col gap-3 flex-1 overflow-y-auto">
-      <button onclick="addElement('header')" class="w-full text-left p-3 border rounded hover:bg-gray-50 transition shadow-sm text-sm font-medium">Header / Navbar</button>
-      <button onclick="addElement('hero')" class="w-full text-left p-3 border rounded hover:bg-gray-50 transition shadow-sm text-sm font-medium">Hero Image</button>
-      <button onclick="addElement('text')" class="w-full text-left p-3 border rounded hover:bg-gray-50 transition shadow-sm text-sm font-medium">Text Block</button>
-      <button onclick="addElement('card')" class="w-full text-left p-3 border rounded hover:bg-gray-50 transition shadow-sm text-sm font-medium">Card Element</button>
-      <button onclick="addElement('button')" class="w-full text-left p-3 border rounded hover:bg-gray-50 transition shadow-sm text-sm font-medium">Action Button</button>
+    <!-- Scrollable Tools Area -->
+    <div class="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
+      
+      <!-- Text Styling Panel -->
+      <div class="bg-gray-50 p-3 rounded border border-gray-200 shadow-inner">
+        <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Typography & Align</h2>
+        
+        <!-- Format (B/I/U) -->
+        <div class="flex gap-1 mb-2">
+          <button onclick="toggleTextStyle('font-bold')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 font-bold shadow-sm">B</button>
+          <button onclick="toggleTextStyle('italic')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 italic shadow-sm">I</button>
+          <button onclick="toggleTextStyle('underline')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 underline shadow-sm">U</button>
+        </div>
+
+        <!-- Align Icons -->
+        <div class="flex gap-1 mb-2 text-gray-600">
+          <button onclick="applyAlignment('text-left')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 shadow-sm flex justify-center" title="Left">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h16"></path></svg>
+          </button>
+          <button onclick="applyAlignment('text-center')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 shadow-sm flex justify-center" title="Center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M4 18h16"></path></svg>
+          </button>
+          <button onclick="applyAlignment('text-right')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 shadow-sm flex justify-center" title="Right">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M10 12h10M4 18h16"></path></svg>
+          </button>
+          <button onclick="applyAlignment('text-justify')" class="flex-1 py-1 bg-white border rounded hover:bg-gray-100 shadow-sm flex justify-center" title="Justify">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+        </div>
+
+        <!-- Exact Sizes -->
+        <div class="flex gap-1">
+          <select onchange="applyTextSize(this.value)" class="w-1/2 p-1 border rounded text-xs bg-white shadow-sm outline-none">
+            <option value="">Sizes (px)</option>
+            <option value="ts-14">14px (XS)</option>
+            <option value="ts-16">16px (S)</option>
+            <option value="ts-20">20px (M)</option>
+            <option value="ts-24">24px (L)</option>
+            <option value="ts-28">28px (H4)</option>
+            <option value="ts-34">34px (H3)</option>
+            <option value="ts-42">42px (H2)</option>
+            <option value="ts-48">48px (H1)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Layout -->
+      <div>
+        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Layout Base</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="addElement('section')" class="p-2 border rounded hover:bg-blue-50 text-sm font-medium col-span-2 text-blue-600 border-blue-200 bg-blue-50/50">Full Section Container</button>
+          <button onclick="addElement('card')" class="p-2 border rounded hover:bg-gray-50 text-sm font-medium">Box / Card</button>
+          <button onclick="addElement('divider')" class="p-2 border rounded hover:bg-gray-50 text-sm font-medium">Divider</button>
+        </div>
+      </div>
+
+      <!-- Typography -->
+      <div>
+        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Typography</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="addElement('heading')" class="p-2 border rounded hover:bg-gray-50 text-sm font-medium">Heading</button>
+          <button onclick="addElement('paragraph')" class="p-2 border rounded hover:bg-gray-50 text-sm font-medium">Paragraph</button>
+        </div>
+      </div>
+
+      <!-- Components -->
+      <div>
+        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">UI Components</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="addElement('header')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium col-span-2">Navigation Bar</button>
+          <button onclick="addElement('hero')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium">Image / Video</button>
+          <button onclick="addElement('button')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium">Button</button>
+          <button onclick="addElement('input')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium">Form Input</button>
+          <button onclick="addElement('avatar')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium">Avatar</button>
+          <button onclick="addElement('iconbox')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium">Icon Feature</button>
+          <button onclick="addElement('tabs')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium">Tabs</button>
+          <button onclick="addElement('pricing')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium col-span-2">Pricing Card</button>
+          <button onclick="addElement('table')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium col-span-2">Data Table</button>
+          <button onclick="addElement('faq')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium col-span-2">FAQ Accordion (x3)</button>
+          <button onclick="addElement('logos')" class="p-2 border rounded hover:bg-gray-50 text-xs font-medium col-span-2">Trusted By Logos</button>
+        </div>
+      </div>
+      
+      <!-- Canvas Settings -->
+      <div class="mt-4 border-t pt-4">
+        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Canvas Height</h2>
+        <div class="flex items-center gap-2">
+          <input type="number" id="canvasHeight" value="2000" step="500" class="border rounded p-1 w-full text-sm">
+          <button onclick="updateCanvasHeight()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-sm font-medium">Apply</button>
+        </div>
+      </div>
     </div>
 
-    <div class="p-4 border-t border-gray-100 bg-gray-50 flex flex-col gap-2">
-      <button id="copyBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded font-semibold text-sm shadow-md transition flex justify-center items-center gap-2">
-        Copy as PNG
-      </button>
-      <button onclick="document.getElementById('canvas').innerHTML = ''" class="w-full bg-white border hover:bg-gray-100 text-gray-600 p-2 rounded font-medium text-sm transition">
-        Clear Canvas
-      </button>
+    <!-- Export Actions (Fixed at Bottom) -->
+    <div class="p-4 border-t border-gray-200 bg-gray-50 flex flex-col gap-2 shrink-0">
+      <button id="copyBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded font-semibold text-sm shadow transition">Copy as PNG</button>
+      <button onclick="clearCanvas()" class="w-full bg-white border hover:bg-red-50 hover:text-red-600 text-gray-600 p-2 rounded font-medium text-sm transition">Clear Canvas</button>
     </div>
   </aside>
 
   <!-- Main Canvas Area -->
-  <main class="flex-1 relative overflow-auto bg-gray-100 p-8 flex justify-center">
-    <div id="canvas-container" class="relative w-full max-w-5xl h-full shadow-xl bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-      <div class="h-10 bg-gray-100 border-b flex items-center px-4 gap-2">
+  <main class="flex-1 relative overflow-auto bg-gray-300 p-8 flex justify-center items-start" id="main-area">
+    <div id="canvas-container" class="relative w-full max-w-[1200px] shadow-2xl bg-white border border-gray-300 overflow-hidden flex flex-col" style="min-height: 2000px;">
+      
+      <!-- Browser Toolbar Mockup -->
+      <div class="h-8 bg-gray-100 border-b flex items-center px-4 gap-2 sticky top-0 z-40" data-html2canvas-ignore="true">
         <div class="w-3 h-3 rounded-full bg-red-400"></div>
         <div class="w-3 h-3 rounded-full bg-yellow-400"></div>
         <div class="w-3 h-3 rounded-full bg-green-400"></div>
       </div>
-      <div id="canvas" class="flex-1 canvas-bg relative overflow-hidden">
-        <!-- Elements injected here via JS -->
+      
+      <!-- Actual Drawing Area -->
+      <div id="canvas" class="flex-1 canvas-bg relative overflow-hidden" style="height: 2000px;">
+        <div id="lasso-box" data-html2canvas-ignore="true"></div>
+        <div id="guide-v" class="guide-line" data-html2canvas-ignore="true"></div>
+        <div id="guide-h" class="guide-line" data-html2canvas-ignore="true"></div>
+        <!-- Elements injected here -->
       </div>
     </div>
   </main>
 
   <script>
     const canvas = document.getElementById('canvas');
+    const canvasContainer = document.getElementById('canvas-container');
+    const contextMenu = document.getElementById('context-menu');
+    const lassoBox = document.getElementById('lasso-box');
+    const guideV = document.getElementById('guide-v');
+    const guideH = document.getElementById('guide-h');
+    let highestZ = 10;
+    let rightClickTarget = null;
 
+    // History Engine (Undo/Redo)
+    let historyStack = [];
+    let historyIndex = -1;
+    let isRestoring = false;
+
+    function saveState() {
+      if (isRestoring) return;
+      if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
+      const clone = canvas.cloneNode(true);
+      
+      // Remove ephemeral UI elements before saving
+      const ephemerals = clone.querySelectorAll('#lasso-box, .guide-line');
+      ephemerals.forEach(e => e.remove());
+
+      historyStack.push({ html: clone.innerHTML, height: canvas.style.height });
+      historyIndex++;
+      localStorage.setItem('wireframe-saved', clone.innerHTML);
+      localStorage.setItem('wireframe-height', canvas.style.height);
+    }
+
+    function loadState(index) {
+      if (index < 0 || index >= historyStack.length) return;
+      isRestoring = true;
+      historyIndex = index;
+      
+      // Keep ephemeral elements intact
+      const ephemerals = `
+        <div id="lasso-box" data-html2canvas-ignore="true"></div>
+        <div id="guide-v" class="guide-line" data-html2canvas-ignore="true"></div>
+        <div id="guide-h" class="guide-line" data-html2canvas-ignore="true"></div>
+      `;
+      canvas.innerHTML = ephemerals + historyStack[index].html;
+      canvas.style.height = historyStack[index].height;
+      document.getElementById('canvasHeight').value = parseInt(historyStack[index].height);
+      
+      document.querySelectorAll('.draggable').forEach(setupElementEvents);
+      localStorage.setItem('wireframe-saved', historyStack[index].html);
+      localStorage.setItem('wireframe-height', historyStack[index].height);
+      isRestoring = false;
+    }
+
+    // Element Blueprints
     const blueprints = {
-      header: `<div class="bg-gray-200 border-2 border-gray-300 w-full h-16 flex items-center px-4 justify-between rounded"><div class="w-24 h-6 bg-gray-300 rounded"></div><div class="flex gap-2"><div class="w-12 h-4 bg-gray-300 rounded"></div><div class="w-12 h-4 bg-gray-300 rounded"></div></div></div>`,
-      hero: `<div class="bg-gray-200 border-2 border-gray-300 flex items-center justify-center rounded flex-col text-gray-400 h-full"><svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span>Image Placeholder</span></div>`,
-      text: `<div class="flex flex-col gap-2 p-2 h-full"><div class="w-3/4 h-6 bg-gray-300 rounded"></div><div class="w-full h-4 bg-gray-200 rounded"></div><div class="w-full h-4 bg-gray-200 rounded"></div><div class="w-5/6 h-4 bg-gray-200 rounded"></div></div>`,
-      card: `<div class="bg-white border-2 border-gray-300 shadow-sm rounded-lg p-4 flex flex-col gap-3 h-full"><div class="w-full h-32 bg-gray-200 rounded"></div><div class="w-2/3 h-5 bg-gray-300 rounded"></div><div class="w-full h-3 bg-gray-200 rounded"></div><div class="w-full h-3 bg-gray-200 rounded"></div></div>`,
-      button: `<div class="bg-blue-500 rounded px-6 py-2 text-white font-medium flex items-center justify-center h-full w-full">Action</div>`
+      section: `<div class="bg-gray-50 border-2 border-dashed border-gray-300 w-full h-full flex items-start p-4"><span class="text-gray-400 font-mono text-sm pointer-events-none">Section</span></div>`,
+      heading: `<h2 contenteditable="true" spellcheck="false" class="ts-42 font-bold text-gray-800 w-full h-full m-0 p-1 break-words">Heading Element</h2>`,
+      paragraph: `<p contenteditable="true" spellcheck="false" class="ts-16 text-gray-600 w-full h-full m-0 p-1 break-words">This is a standard paragraph block. Click to edit. Use the sidebar to change alignment and size.</p>`,
+      header: `<div class="bg-gray-800 w-full h-full flex items-center px-6 justify-between shadow-sm"><div contenteditable="true" spellcheck="false" class="text-white font-bold text-lg outline-none">BrandLogo</div><div class="flex gap-6"><div class="w-16 h-2 bg-gray-500 rounded"></div><div class="w-16 h-2 bg-gray-500 rounded"></div><div class="w-16 h-2 bg-gray-500 rounded"></div></div></div>`,
+      hero: `<div class="bg-gray-200 border-2 border-gray-300 flex items-center justify-center flex-col text-gray-400 h-full w-full"><svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span contenteditable="true" spellcheck="false" class="outline-none">Image / Video</span></div>`,
+      card: `<div class="bg-white border border-gray-200 shadow-md p-5 flex flex-col gap-3 h-full w-full"><div class="w-full h-32 bg-gray-100 border border-gray-200"></div><h3 contenteditable="true" class="ts-20 font-bold outline-none text-left">Card Title</h3><p contenteditable="true" class="ts-14 text-gray-500 outline-none flex-1 text-left">Description goes here.</p></div>`,
+      button: `<div class="bg-blue-600 shadow-sm text-white font-medium flex items-center justify-center h-full w-full"><span contenteditable="true" spellcheck="false" class="outline-none px-2 text-center w-full">Action Button</span></div>`,
+      input: `<div class="bg-white border-2 border-gray-300 px-4 py-2 flex items-center h-full w-full"><span contenteditable="true" spellcheck="false" class="text-gray-400 outline-none w-full">Enter text...</span></div>`,
+      divider: `<div class="w-full h-full flex items-center justify-center pointer-events-none"><div class="w-full border-t-2 border-gray-300"></div></div>`,
+      iconbox: `<div class="flex flex-col items-center justify-center text-center p-4 h-full w-full"><div class="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mb-3 text-gray-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div><h4 contenteditable="true" class="ts-16 font-bold mb-1 outline-none">Feature Title</h4><p contenteditable="true" class="ts-14 text-gray-500 outline-none">Short explanation.</p></div>`,
+      avatar: `<div class="flex items-center gap-3 w-full h-full"><div class="w-12 h-12 rounded-full bg-gray-300 shrink-0"></div><div class="flex flex-col"><span contenteditable="true" class="font-bold ts-14 outline-none">User Name</span><span contenteditable="true" class="text-gray-500 ts-14 outline-none">Role / Title</span></div></div>`,
+      logos: `<div class="flex justify-between items-center w-full h-full px-4 gap-8 bg-gray-50 border border-gray-200"><div class="h-8 w-24 bg-gray-300 opacity-50 flex-1"></div><div class="h-8 w-24 bg-gray-300 opacity-50 flex-1"></div><div class="h-8 w-24 bg-gray-300 opacity-50 flex-1"></div><div class="h-8 w-24 bg-gray-300 opacity-50 flex-1"></div><div class="h-8 w-24 bg-gray-300 opacity-50 flex-1"></div></div>`,
+      faq: `<div class="w-full h-full flex flex-col gap-2"><div class="border border-gray-200 bg-white flex justify-between p-4 shadow-sm"><h4 contenteditable="true" class="font-bold outline-none text-gray-800 flex-1">Question 1 goes here?</h4><span>+</span></div><div class="border border-gray-200 bg-white flex justify-between p-4 shadow-sm"><h4 contenteditable="true" class="font-bold outline-none text-gray-800 flex-1">Question 2 goes here?</h4><span>+</span></div><div class="border border-gray-200 bg-white flex flex-col p-4 shadow-sm"><div class="flex justify-between mb-2"><h4 contenteditable="true" class="font-bold outline-none text-gray-800 flex-1">Question 3 expanded?</h4><span>-</span></div><p contenteditable="true" class="ts-14 text-gray-500 border-t pt-2 outline-none">This is the expanded answer text.</p></div></div>`,
+      tabs: `<div class="w-full h-full flex flex-col"><div class="flex border-b border-gray-300"><div contenteditable="true" class="px-4 py-2 border-b-2 border-blue-600 font-bold text-blue-600 outline-none">Active Tab</div><div contenteditable="true" class="px-4 py-2 text-gray-500 outline-none">Tab Two</div><div contenteditable="true" class="px-4 py-2 text-gray-500 outline-none">Tab Three</div></div><div class="p-4 bg-gray-50 flex-1 border border-t-0 border-gray-200"><p contenteditable="true" class="ts-14 text-gray-600 outline-none">Tab content area.</p></div></div>`,
+      pricing: `<div class="bg-white border-2 border-gray-200 shadow-lg p-6 flex flex-col h-full w-full text-center relative"><div class="absolute top-0 right-0 bg-blue-600 text-white text-[10px] px-2 py-1 uppercase font-bold">Popular</div><h3 contenteditable="true" class="ts-20 font-bold outline-none mb-2">Pro Plan</h3><div class="text-4xl font-bold mb-4">$<span contenteditable="true" class="outline-none">49</span><span class="text-sm text-gray-500 font-normal">/mo</span></div><div class="flex-1 flex flex-col gap-2 text-sm text-gray-600 mb-6"><div contenteditable="true" class="outline-none border-b pb-2">✓ Feature one included</div><div contenteditable="true" class="outline-none border-b pb-2">✓ Feature two included</div><div contenteditable="true" class="outline-none border-b pb-2">✓ Feature three included</div></div><div class="bg-blue-600 text-white py-2 font-bold w-full mt-auto"><span contenteditable="true" class="outline-none">Get Started</span></div></div>`,
+      table: `<div class="w-full h-full border border-gray-200 bg-white flex flex-col"><div class="flex bg-gray-100 border-b border-gray-200 font-bold ts-14 text-gray-700"><div contenteditable="true" class="flex-1 p-3 border-r outline-none">Column 1</div><div contenteditable="true" class="flex-1 p-3 border-r outline-none">Column 2</div><div contenteditable="true" class="flex-1 p-3 outline-none">Column 3</div></div><div class="flex border-b border-gray-100 ts-14 text-gray-600"><div contenteditable="true" class="flex-1 p-3 border-r outline-none">Data cell</div><div contenteditable="true" class="flex-1 p-3 border-r outline-none">Data cell</div><div contenteditable="true" class="flex-1 p-3 outline-none">Data cell</div></div><div class="flex border-b border-gray-100 ts-14 text-gray-600"><div contenteditable="true" class="flex-1 p-3 border-r outline-none">Data cell</div><div contenteditable="true" class="flex-1 p-3 border-r outline-none">Data cell</div><div contenteditable="true" class="flex-1 p-3 outline-none">Data cell</div></div></div>`
     };
 
     const defaultSizes = {
-      header: { w: 600, h: 64 },
-      hero: { w: 600, h: 300 },
-      text: { w: 400, h: 100 },
-      card: { w: 250, h: 250 },
-      button: { w: 120, h: 40 }
+      section: { w: 1000, h: 300 }, heading: { w: 400, h: 60 }, paragraph: { w: 400, h: 120 },
+      header: { w: 1000, h: 70 }, hero: { w: 800, h: 400 }, card: { w: 300, h: 350 },
+      button: { w: 160, h: 48 }, input: { w: 300, h: 48 }, divider: { w: 800, h: 20 },
+      iconbox: { w: 200, h: 180 }, avatar: { w: 200, h: 60 }, logos: { w: 1000, h: 100 }, 
+      faq: { w: 600, h: 240 }, tabs: { w: 500, h: 200 }, pricing: { w: 300, h: 400 }, table: { w: 600, h: 200 }
     };
+
+    function updateCanvasHeight() {
+      const h = document.getElementById('canvasHeight').value;
+      canvas.style.height = `${h}px`;
+      canvasContainer.style.minHeight = `${parseInt(h) + 32}px`;
+      saveState();
+    }
+
+    // Text Formatting
+    function toggleTextStyle(className) {
+      document.querySelectorAll('.active-element').forEach(el => {
+        const nodes = el.querySelectorAll('[contenteditable="true"]').length > 0 ? el.querySelectorAll('[contenteditable="true"]') : [el];
+        nodes.forEach(node => node.classList.toggle(className));
+      });
+      saveState();
+    }
+
+    function applyAlignment(alignClass) {
+      document.querySelectorAll('.active-element').forEach(el => {
+        const nodes = el.querySelectorAll('[contenteditable="true"]').length > 0 ? el.querySelectorAll('[contenteditable="true"]') : [el];
+        nodes.forEach(node => {
+          node.classList.remove('text-left', 'text-center', 'text-right', 'text-justify');
+          node.classList.add(alignClass);
+        });
+      });
+      saveState();
+    }
+
+    function applyTextSize(sizeClass) {
+      if(!sizeClass) return;
+      const allSizes = ['ts-14', 'ts-16', 'ts-20', 'ts-24', 'ts-28', 'ts-34', 'ts-42', 'ts-48'];
+      document.querySelectorAll('.active-element').forEach(el => {
+        const nodes = el.querySelectorAll('[contenteditable="true"]').length > 0 ? el.querySelectorAll('[contenteditable="true"]') : [el];
+        nodes.forEach(node => {
+          node.className = node.className.replace(/\btext-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl)\b/g, '');
+          node.classList.remove(...allSizes);
+          node.classList.add(sizeClass);
+        });
+      });
+      saveState();
+    }
+
+    // Context Menu
+    function showContextMenu(e, el) {
+      e.preventDefault();
+      rightClickTarget = el;
+      contextMenu.style.display = 'block';
+      contextMenu.style.left = `${e.clientX}px`; contextMenu.style.top = `${e.clientY}px`;
+      if(!el.classList.contains('active-element')) {
+        document.querySelectorAll('.draggable').forEach(d => d.classList.remove('active-element'));
+        el.classList.add('active-element');
+      }
+    }
+
+    function layerAction(action) {
+      if (!rightClickTarget) return;
+      if (action === 'front') { highestZ += 10; rightClickTarget.style.zIndex = highestZ; }
+      else if (action === 'back') { rightClickTarget.style.zIndex = 2; }
+      else if (action === 'delete') { document.querySelectorAll('.active-element').forEach(el => el.remove()); }
+      else if (action === 'toggle-lock') { document.querySelectorAll('.active-element').forEach(el => el.classList.toggle('locked')); }
+      contextMenu.style.display = 'none';
+      saveState();
+    }
+
+    // Lasso Selection
+    let isSelecting = false, startX, startY;
+    
+    canvas.addEventListener('mousedown', (e) => {
+      if (!contextMenu.contains(e.target)) contextMenu.style.display = 'none';
+      if (!e.target.isContentEditable && document.activeElement.isContentEditable) document.activeElement.blur();
+
+      if (e.target === canvas) {
+        document.querySelectorAll('.draggable').forEach(d => d.classList.remove('active-element'));
+        isSelecting = true;
+        const rect = canvas.getBoundingClientRect();
+        startX = e.clientX - rect.left + canvas.scrollLeft;
+        startY = e.clientY - rect.top + canvas.scrollTop;
+        
+        lassoBox.style.left = startX + 'px'; lassoBox.style.top = startY + 'px';
+        lassoBox.style.width = '0px'; lassoBox.style.height = '0px';
+        lassoBox.style.display = 'block';
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isSelecting) return;
+      const rect = canvas.getBoundingClientRect();
+      const currentX = e.clientX - rect.left + canvas.scrollLeft;
+      const currentY = e.clientY - rect.top + canvas.scrollTop;
+      
+      const left = Math.min(startX, currentX); const top = Math.min(startY, currentY);
+      const width = Math.abs(currentX - startX); const height = Math.abs(currentY - startY);
+      
+      lassoBox.style.left = left + 'px'; lassoBox.style.top = top + 'px';
+      lassoBox.style.width = width + 'px'; lassoBox.style.height = height + 'px';
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (isSelecting) {
+        isSelecting = false;
+        lassoBox.style.display = 'none';
+        
+        const lBox = {
+          x: parseInt(lassoBox.style.left), y: parseInt(lassoBox.style.top),
+          w: parseInt(lassoBox.style.width), h: parseInt(lassoBox.style.height)
+        };
+        
+        if (lBox.w > 5 && lBox.h > 5) {
+          document.querySelectorAll('.draggable').forEach(el => {
+            const ex = parseFloat(el.getAttribute('data-x')); const ey = parseFloat(el.getAttribute('data-y'));
+            const ew = parseFloat(el.style.width); const eh = parseFloat(el.style.height);
+            
+            if (ex < lBox.x + lBox.w && ex + ew > lBox.x && ey < lBox.y + lBox.h && ey + eh > lBox.y) {
+              el.classList.add('active-element');
+            }
+          });
+        }
+      }
+    });
+
+    function setupElementEvents(el) {
+      el.addEventListener('mousedown', (e) => {
+        if(e.target.isContentEditable || e.button === 2) return; 
+        if(!el.classList.contains('section-block') && !el.classList.contains('locked')) {
+          highestZ++; el.style.zIndex = highestZ;
+        }
+
+        if (e.shiftKey) { el.classList.toggle('active-element'); } 
+        else {
+          if (!el.classList.contains('active-element')) {
+            document.querySelectorAll('.draggable').forEach(d => d.classList.remove('active-element'));
+            el.classList.add('active-element');
+          }
+        }
+      });
+      el.addEventListener('contextmenu', (e) => showContextMenu(e, el));
+    }
 
     function addElement(type) {
       const el = document.createElement('div');
-      el.className = 'draggable absolute';
+      const isSection = type === 'section';
+      
+      highestZ++;
+      el.className = `draggable absolute ${isSection ? 'section-block' : ''}`;
+      el.style.zIndex = isSection ? 1 : highestZ;
       
       const size = defaultSizes[type];
-      el.style.width = size.w + 'px';
-      el.style.height = size.h + 'px';
+      el.style.width = size.w + 'px'; el.style.height = size.h + 'px';
       
       const cx = (canvas.offsetWidth / 2) - (size.w / 2);
-      const cy = (canvas.offsetHeight / 2) - (size.h / 2);
-      
-      el.style.transform = `translate(${cx}px, ${cy}px)`;
-      el.setAttribute('data-x', cx);
-      el.setAttribute('data-y', cy);
-      
+      const scrollY = document.getElementById('main-area').scrollTop;
+      el.style.transform = `translate(${cx}px, ${scrollY + 100}px)`;
+      el.setAttribute('data-x', cx); el.setAttribute('data-y', scrollY + 100);
       el.innerHTML = blueprints[type];
       
-      const handle = document.createElement('div');
-      handle.className = 'resize-handle';
-      el.appendChild(handle);
+      const rHandle = document.createElement('div'); rHandle.className = 'resize-handle'; rHandle.setAttribute('data-html2canvas-ignore', 'true');
+      const dHandle = document.createElement('div'); dHandle.className = 'drag-handle'; dHandle.setAttribute('data-html2canvas-ignore', 'true'); dHandle.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>`;
       
-      el.addEventListener('mousedown', () => {
-        document.querySelectorAll('.draggable').forEach(d => d.classList.remove('active-element'));
-        el.classList.add('active-element');
-      });
-
-      el.addEventListener('dblclick', () => el.remove());
-
+      el.appendChild(rHandle); el.appendChild(dHandle);
+      setupElementEvents(el);
       canvas.appendChild(el);
+      saveState();
     }
 
+    function clearCanvas() {
+      if(confirm('Clear entire canvas?')) { 
+        document.querySelectorAll('.draggable').forEach(e => e.remove()); 
+        saveState(); 
+      }
+    }
+
+    // Keyboard Shortcuts
+    let clipboard = [];
+    document.addEventListener('keydown', (e) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdCtrl = isMac ? e.metaKey : e.ctrlKey;
+      
+      if (!document.activeElement.isContentEditable && (e.key.toLowerCase() === 'h')) {
+        const hm = document.getElementById('help-modal'); hm.style.display = hm.style.display === 'flex' ? 'none' : 'flex'; return;
+      }
+      if (document.activeElement.isContentEditable || document.activeElement.tagName === 'INPUT') return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const actives = document.querySelectorAll('.active-element');
+        if(actives.length > 0) { actives.forEach(el => el.remove()); saveState(); }
+      }
+
+      if (cmdCtrl && e.key.toLowerCase() === 'c') {
+        clipboard = [];
+        document.querySelectorAll('.active-element').forEach(el => {
+          const clone = el.cloneNode(true);
+          const rHandle = clone.querySelector('.resize-handle'); if(rHandle) rHandle.remove();
+          const dHandle = clone.querySelector('.drag-handle'); if(dHandle) dHandle.remove();
+          clipboard.push({
+            html: clone.innerHTML, width: el.style.width, height: el.style.height,
+            classes: el.className, zIndex: el.style.zIndex,
+            x: parseFloat(el.getAttribute('data-x')) || 0, y: parseFloat(el.getAttribute('data-y')) || 0
+          });
+        });
+      }
+
+      if (cmdCtrl && e.key.toLowerCase() === 'v') {
+        if (clipboard.length === 0) return;
+        document.querySelectorAll('.active-element').forEach(el => el.classList.remove('active-element'));
+        highestZ++;
+        clipboard.forEach(item => {
+          const el = document.createElement('div'); el.className = item.classes;
+          if (!el.classList.contains('active-element')) el.classList.add('active-element');
+          el.style.width = item.width; el.style.height = item.height;
+          el.style.zIndex = el.classList.contains('section-block') ? 1 : highestZ;
+          
+          const cx = item.x + 20; const cy = item.y + 20;
+          el.style.transform = `translate(${cx}px, ${cy}px)`; el.setAttribute('data-x', cx); el.setAttribute('data-y', cy);
+          el.innerHTML = item.html;
+          
+          const rHandle = document.createElement('div'); rHandle.className = 'resize-handle'; rHandle.setAttribute('data-html2canvas-ignore', 'true');
+          const dHandle = document.createElement('div'); dHandle.className = 'drag-handle'; dHandle.setAttribute('data-html2canvas-ignore', 'true'); dHandle.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>`;
+          el.appendChild(rHandle); el.appendChild(dHandle);
+          
+          setupElementEvents(el); canvas.appendChild(el);
+          item.x = cx; item.y = cy;
+        });
+        saveState();
+      }
+
+      if (cmdCtrl && e.key.toLowerCase() === 'z') { e.preventDefault(); loadState(historyIndex - 1); }
+      if (cmdCtrl && e.key.toLowerCase() === 'y') { e.preventDefault(); loadState(historyIndex + 1); }
+    });
+
+    // Purely Visual Smart Guides
+    function updateGuides(target, x, y) {
+      const snapThreshold = 5;
+      const tRect = { l: x, c: x + (parseFloat(target.style.width)/2), r: x + parseFloat(target.style.width),
+                      t: y, m: y + (parseFloat(target.style.height)/2), b: y + parseFloat(target.style.height) };
+      
+      let showGuideV = false, showGuideH = false;
+      let vGuideX = 0, hGuideY = 0;
+
+      document.querySelectorAll('.draggable:not(.active-element)').forEach(el => {
+        if(el === target || el.classList.contains('section-block')) return;
+        const ex = parseFloat(el.getAttribute('data-x')); const ey = parseFloat(el.getAttribute('data-y'));
+        const ew = parseFloat(el.style.width); const eh = parseFloat(el.style.height);
+        const eRect = { l: ex, c: ex + (ew/2), r: ex + ew, t: ey, m: ey + (eh/2), b: ey + eh };
+
+        if (Math.abs(tRect.l - eRect.l) < snapThreshold) { showGuideV = true; vGuideX = eRect.l; }
+        else if (Math.abs(tRect.c - eRect.c) < snapThreshold) { showGuideV = true; vGuideX = eRect.c; }
+        else if (Math.abs(tRect.r - eRect.r) < snapThreshold) { showGuideV = true; vGuideX = eRect.r; }
+        
+        if (Math.abs(tRect.t - eRect.t) < snapThreshold) { showGuideH = true; hGuideY = eRect.t; }
+        else if (Math.abs(tRect.m - eRect.m) < snapThreshold) { showGuideH = true; hGuideY = eRect.m; }
+        else if (Math.abs(tRect.b - eRect.b) < snapThreshold) { showGuideH = true; hGuideY = eRect.b; }
+      });
+
+      if(showGuideV) { guideV.style.left = vGuideX + 'px'; guideV.style.display = 'block'; } else guideV.style.display = 'none';
+      if(showGuideH) { guideH.style.top = hGuideY + 'px'; guideH.style.display = 'block'; } else guideH.style.display = 'none';
+    }
+
+    // Drag Config (100% Free Movement)
     interact('.draggable')
       .draggable({
-        modifiers: [
-          interact.modifiers.snap({
-            targets: [interact.createSnapGrid({ x: 20, y: 20 })],
-            range: Infinity,
-            relativePoints: [ { x: 0, y: 0 } ]
-          }),
-          interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true })
-        ],
+        ignoreFrom: '[contenteditable="true"], .locked', 
         listeners: {
           move(event) {
             const target = event.target;
-            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-            
-            target.style.transform = `translate(${x}px, ${y}px)`;
-            target.setAttribute('data-x', x);
-            target.setAttribute('data-y', y);
-          }
+            const activeElements = document.querySelectorAll('.active-element');
+            const itemsToMove = target.classList.contains('active-element') ? activeElements : [target];
+
+            itemsToMove.forEach(item => {
+              if(item.classList.contains('locked')) return;
+              let x = (parseFloat(item.getAttribute('data-x')) || 0) + event.dx;
+              let y = (parseFloat(item.getAttribute('data-y')) || 0) + event.dy;
+              
+              if (itemsToMove.length === 1) { updateGuides(item, x, y); }
+
+              item.style.transform = `translate(${x}px, ${y}px)`;
+              item.setAttribute('data-x', x); item.setAttribute('data-y', y);
+            });
+          },
+          end() { guideV.style.display = 'none'; guideH.style.display = 'none'; saveState(); }
         }
       })
       .resizable({
         edges: { right: '.resize-handle', bottom: '.resize-handle' },
-        modifiers: [
-          interact.modifiers.snapSize({ targets: [interact.createSnapGrid({ x: 20, y: 20 })] })
-        ],
+        ignoreFrom: '.locked',
         listeners: {
           move: function (event) {
             let { x, y } = event.target.dataset;
-            x = (parseFloat(x) || 0) + event.deltaRect.left;
-            y = (parseFloat(y) || 0) + event.deltaRect.top;
-
-            Object.assign(event.target.style, {
-              width: `${event.rect.width}px`,
-              height: `${event.rect.height}px`,
-              transform: `translate(${x}px, ${y}px)`
-            });
+            x = (parseFloat(x) || 0) + event.deltaRect.left; y = (parseFloat(y) || 0) + event.deltaRect.top;
+            Object.assign(event.target.style, { width: `${event.rect.width}px`, height: `${event.rect.height}px`, transform: `translate(${x}px, ${y}px)` });
             Object.assign(event.target.dataset, { x, y });
-          }
+          },
+          end() { saveState(); }
         }
       });
 
-    canvas.addEventListener('mousedown', (e) => {
-      if(e.target === canvas) {
-        document.querySelectorAll('.draggable').forEach(d => d.classList.remove('active-element'));
-      }
-    });
-
+    // Export Logic
     document.getElementById('copyBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('copyBtn');
-      const originalText = btn.innerText;
-      btn.innerText = "Copying...";
+      const btn = document.getElementById('copyBtn'); const originalText = btn.innerText; btn.innerText = "Processing...";
+      document.querySelectorAll('.active-element').forEach(d => d.classList.remove('active-element'));
       
-      document.querySelectorAll('.draggable').forEach(d => d.classList.remove('active-element'));
-      document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
-      
-      const node = document.getElementById('canvas-container');
+      lassoBox.style.display = 'none'; guideV.style.display = 'none'; guideH.style.display = 'none';
       
       try {
-        const blob = await htmlToImage.toBlob(node, { 
-          quality: 1, 
-          backgroundColor: '#f3f4f6' 
-        });
-        
-        const item = new ClipboardItem({ "image/png": blob });
-        await navigator.clipboard.write([item]);
-        
-        btn.innerText = "Copied!";
-        btn.classList.add('bg-green-600');
-        setTimeout(() => {
-          btn.innerText = originalText;
-          btn.classList.remove('bg-green-600');
-        }, 2000);
-      } catch (err) {
-        console.error("Copy failed", err);
-        btn.innerText = "Error!";
-        setTimeout(() => { btn.innerText = originalText; }, 2000);
-      } finally {
-        document.querySelectorAll('.resize-handle').forEach(h => h.style.display = '');
-      }
+        const blob = await htmlToImage.toBlob(document.getElementById('canvas-container'), { quality: 1, backgroundColor: '#ffffff' });
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        btn.innerText = "Copied to Clipboard!"; btn.classList.replace('bg-blue-600', 'bg-green-600');
+        setTimeout(() => { btn.innerText = originalText; btn.classList.replace('bg-green-600', 'bg-blue-600'); }, 2000);
+      } catch (err) { btn.innerText = "Export Error"; setTimeout(() => { btn.innerText = originalText; }, 2000); }
     });
+
+    window.onload = () => {
+      const savedHTML = localStorage.getItem('wireframe-saved');
+      const savedHeight = localStorage.getItem('wireframe-height');
+      const ephemerals = `<div id="lasso-box" data-html2canvas-ignore="true"></div><div id="guide-v" class="guide-line" data-html2canvas-ignore="true"></div><div id="guide-h" class="guide-line" data-html2canvas-ignore="true"></div>`;
+      
+      if (savedHTML && savedHTML.trim() !== '') {
+        canvas.innerHTML = ephemerals + savedHTML.replace(/<div id="(lasso-box|guide-v|guide-h)".*?<\/div>/g, '');
+        if(savedHeight) { 
+          canvas.style.height = savedHeight; 
+          document.getElementById('canvas-container').style.minHeight = `${parseInt(savedHeight) + 32}px`;
+          document.getElementById('canvasHeight').value = parseInt(savedHeight);
+        }
+        document.querySelectorAll('.draggable').forEach(setupElementEvents);
+        historyStack.push({ html: canvas.innerHTML, height: savedHeight || "2000px" }); historyIndex = 0;
+      } else { saveState(); }
+    };
   </script>
 </body>
 </html>
